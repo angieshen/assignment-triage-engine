@@ -1,0 +1,495 @@
+cat << 'EOF' > /Users/angieshen/assignment-triage-engine/index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Assignment Triage Engine</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            ucla: { blue: '#2774AE', gold: '#FFD100', dark: '#003B5C' }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <style>
+    @keyframes pulse-subtle { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+    .urgent-pulse { animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    #addModal.is-open { display: flex !important; }
+    #addModal:not(.is-open) { display: none !important; }
+  </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen flex flex-col font-sans antialiased transition-colors duration-200">
+
+  <!-- Header -->
+  <header class="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+          <i class="fa-solid fa-bullseye text-lg"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight flex items-center gap-2">
+            Assignment Triage Engine
+            <span class="text-xs font-semibold px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">v2.1</span>
+          </h1>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Score = Grade Weight (%) / max(Days Left, 0.25)</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button id="themeToggle" class="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition">
+          <i class="fa-solid fa-moon dark:hidden"></i>
+          <i class="fa-solid fa-sun hidden dark:block text-amber-400"></i>
+        </button>
+        <button id="importCsvBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+          <i class="fa-solid fa-file-import"></i> Import CSV
+        </button>
+        <input type="file" id="csvFileInput" accept=".csv" class="hidden" />
+        <button id="exportCsvBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+          <i class="fa-solid fa-file-export"></i> Export CSV
+        </button>
+        <button id="exportIcsBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition">
+          <i class="fa-regular fa-calendar-plus"></i> Export .ICS
+        </button>
+        <button id="openAddModalBtn" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition shadow-sm cursor-pointer">
+          <i class="fa-solid fa-plus"></i> Add Assignment
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full space-y-6">
+
+    <!-- KPI Metric Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+        <span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Pending Tasks</span>
+        <div class="mt-1 flex items-baseline justify-between">
+          <span id="kpiTotal" class="text-2xl font-bold">0</span>
+          <i class="fa-solid fa-list-check text-slate-400"></i>
+        </div>
+      </div>
+      <div class="p-4 rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50/50 dark:bg-red-950/20 shadow-sm">
+        <span class="text-xs font-medium text-red-600 dark:text-red-400 uppercase tracking-wider">Urgent (&lt;24h)</span>
+        <div class="mt-1 flex items-baseline justify-between">
+          <span id="kpiUrgent" class="text-2xl font-bold text-red-600 dark:text-red-400">0</span>
+          <i class="fa-solid fa-triangle-exclamation text-red-500"></i>
+        </div>
+      </div>
+      <div class="p-4 rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/20 shadow-sm">
+        <span class="text-xs font-medium text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">High Stakes (≥10%)</span>
+        <div class="mt-1 flex items-baseline justify-between">
+          <span id="kpiHighStakes" class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">0</span>
+          <i class="fa-solid fa-shield-halved text-indigo-500"></i>
+        </div>
+      </div>
+      <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+        <span class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Avg Grade Weight</span>
+        <div class="mt-1 flex items-baseline justify-between">
+          <span id="kpiAvgWeight" class="text-2xl font-bold">0%</span>
+          <i class="fa-solid fa-percent text-slate-400"></i>
+        </div>
+      </div>
+    </div>
+
+    <!-- Prioritized List Table -->
+    <div class="border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+      <div class="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        <h2 class="text-sm font-semibold tracking-wide flex items-center gap-2">
+          <i class="fa-solid fa-arrow-down-wide-short text-blue-500"></i> Prioritized Work Queue
+        </h2>
+        <span class="text-xs text-slate-500">Auto-sorted by highest triage priority score</span>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-slate-50 dark:bg-slate-800/60 text-xs uppercase font-medium text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+            <tr>
+              <th class="py-3 px-4 text-center">Rank</th>
+              <th class="py-3 px-4">Course</th>
+              <th class="py-3 px-4">Assignment</th>
+              <th class="py-3 px-4 text-center">Due Date</th>
+              <th class="py-3 px-4 text-right">Countdown</th>
+              <th class="py-3 px-4 text-right">Weight</th>
+              <th class="py-3 px-4 text-right font-bold text-blue-600 dark:text-blue-400">Triage Score</th>
+              <th class="py-3 px-4 text-center">Urgency</th>
+              <th class="py-3 px-4 text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="assignmentTableBody" class="divide-y divide-slate-200 dark:divide-slate-800">
+            <!-- Rendered by JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 2x2 Priority Matrix -->
+    <div class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">2x2 Priority Matrix</h3>
+        <span class="text-xs text-slate-400">Urgency (&lt;48h) vs Impact (≥10% Weight)</span>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Q1 -->
+        <div class="p-4 rounded-xl border border-red-200 dark:border-red-950 bg-red-50/30 dark:bg-red-950/10 min-h-[140px]">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-bold text-red-600 dark:text-red-400 uppercase">Q1: Do First (Critical & High Stakes)</span>
+            <span id="badgeQ1" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/60 text-red-700 dark:text-red-300">0</span>
+          </div>
+          <div id="matrixQ1" class="space-y-1.5 text-xs text-slate-600 dark:text-slate-300"></div>
+        </div>
+        <!-- Q2 -->
+        <div class="p-4 rounded-xl border border-blue-200 dark:border-blue-950 bg-blue-50/30 dark:bg-blue-950/10 min-h-[140px]">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase">Q2: Strategic (High Stakes, More Time)</span>
+            <span id="badgeQ2" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">0</span>
+          </div>
+          <div id="matrixQ2" class="space-y-1.5 text-xs text-slate-600 dark:text-slate-300"></div>
+        </div>
+        <!-- Q3 -->
+        <div class="p-4 rounded-xl border border-amber-200 dark:border-amber-950 bg-amber-50/30 dark:bg-amber-950/10 min-h-[140px]">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase">Q3: Quick Wins (Due Soon, Lower Stakes)</span>
+            <span id="badgeQ3" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">0</span>
+          </div>
+          <div id="matrixQ3" class="space-y-1.5 text-xs text-slate-600 dark:text-slate-300"></div>
+        </div>
+        <!-- Q4 -->
+        <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 min-h-[140px]">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase">Q4: Backlog (Low Urgency & Stakes)</span>
+            <span id="badgeQ4" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">0</span>
+          </div>
+          <div id="matrixQ4" class="space-y-1.5 text-xs text-slate-500 dark:text-slate-400"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Add Task Modal -->
+  <div id="addModal" class="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-xl">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+        <h3 class="text-base font-bold">Add Assignment</h3>
+        <button id="closeModalBtn" type="button" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg p-1">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <form id="addForm" class="space-y-4 mt-4">
+        <div>
+          <label class="block text-xs font-medium uppercase tracking-wider text-slate-500 mb-1">Course Code</label>
+          <input type="text" id="courseInput" required placeholder="e.g. STATS 100A, CS 32" class="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium uppercase tracking-wider text-slate-500 mb-1">Task Title</label>
+          <input type="text" id="taskInput" required placeholder="e.g. Homework 4, Project 2" class="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium uppercase tracking-wider text-slate-500 mb-1">Due Date</label>
+          <input type="date" id="dueDateInput" required class="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium uppercase tracking-wider text-slate-500 mb-1">Grade Weight (%)</label>
+          <!-- Fixed validation: step="any" and min="0" allows integers like 10 as well as decimals -->
+          <input type="number" id="weightInput" min="0" max="100" step="any" required placeholder="e.g. 10 or 15.5" class="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100" />
+        </div>
+        <div class="pt-2 flex justify-end gap-2">
+          <button type="button" id="cancelModalBtn" class="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition">Cancel</button>
+          <button type="submit" class="px-4 py-2 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition">Save Assignment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'triage_assignments_v2';
+    const DEFAULT_ASSIGNMENTS = [
+      { course: 'STATS 100A', task: 'Homework 4', due_date: '2026-10-24', grade_weight_pct: 5 },
+      { course: 'CS 32', task: 'Project 2: Doubly-Linked Lists', due_date: '2026-10-26', grade_weight_pct: 10 },
+      { course: 'ENGCOMP 3', task: 'Draft Rhetorical Analysis', due_date: '2026-10-22', grade_weight_pct: 15 },
+      { course: 'STATS 100A', task: 'Midterm 1 Review', due_date: '2026-10-28', grade_weight_pct: 25 },
+      { course: 'MATH 33A', task: 'Problem Set 3', due_date: '2026-10-23', grade_weight_pct: 4 }
+    ];
+
+    function getAssignments() {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (!stored) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_ASSIGNMENTS));
+        return DEFAULT_ASSIGNMENTS;
+      }
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        return DEFAULT_ASSIGNMENTS;
+      }
+    }
+
+    function saveAssignments(items) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+      render();
+    }
+
+    function computeScoredList(items) {
+      const now = new Date();
+      return items.map((item, originalIndex) => {
+        const dueDate = new Date(item.due_date + 'T23:59:59');
+        const diffDays = (dueDate - now) / (1000 * 60 * 60 * 24);
+        const effectiveDays = Math.max(diffDays, 0.25);
+        const triageScore = Number(item.grade_weight_pct) / effectiveDays;
+        return { ...item, originalIndex, daysLeft: diffDays, triageScore };
+      }).sort((a, b) => b.triageScore - a.triageScore);
+    }
+
+    function render() {
+      const items = getAssignments();
+      const scored = computeScoredList(items);
+
+      document.getElementById('kpiTotal').textContent = scored.length;
+      document.getElementById('kpiUrgent').textContent = scored.filter(i => i.daysLeft < 1).length;
+      document.getElementById('kpiHighStakes').textContent = scored.filter(i => i.grade_weight_pct >= 10).length;
+      const avgW = scored.length > 0 ? (scored.reduce((acc, cur) => acc + Number(cur.grade_weight_pct), 0) / scored.length).toFixed(1) : 0;
+      document.getElementById('kpiAvgWeight').textContent = `${avgW}%`;
+
+      const tbody = document.getElementById('assignmentTableBody');
+      tbody.innerHTML = '';
+
+      if (scored.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center py-8 text-slate-400">No pending assignments. Click "Add Assignment" to begin.</td></tr>`;
+      } else {
+        scored.forEach((row, rank) => {
+          const tr = document.createElement('tr');
+          tr.className = 'hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition';
+
+          let urgencyBadge = '<span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">Backlog</span>';
+          let daysStr = `${row.daysLeft.toFixed(1)}d`;
+
+          if (row.daysLeft < 1) {
+            urgencyBadge = '<span class="urgent-pulse px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">Work Now</span>';
+            daysStr = `<span class="text-red-600 dark:text-red-400 font-bold">${daysStr}</span>`;
+          } else if (row.daysLeft < 3) {
+            urgencyBadge = '<span class="px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">Scheduled</span>';
+            daysStr = `<span class="text-amber-600 dark:text-amber-400 font-semibold">${daysStr}</span>`;
+          }
+
+          tr.innerHTML = `
+            <td class="py-3 px-4 text-center font-bold text-slate-400">${rank + 1}</td>
+            <td class="py-3 px-4 font-semibold text-blue-600 dark:text-blue-400">${escapeHtml(row.course)}</td>
+            <td class="py-3 px-4 font-medium">${escapeHtml(row.task)}</td>
+            <td class="py-3 px-4 text-center text-xs font-mono text-slate-500">${row.due_date}</td>
+            <td class="py-3 px-4 text-right font-mono text-xs">${daysStr}</td>
+            <td class="py-3 px-4 text-right font-medium">${row.grade_weight_pct}%</td>
+            <td class="py-3 px-4 text-right font-mono font-bold text-blue-600 dark:text-blue-400">${row.triageScore.toFixed(1)}</td>
+            <td class="py-3 px-4 text-center">${urgencyBadge}</td>
+            <td class="py-3 px-4 text-center">
+              <div class="inline-flex items-center gap-1">
+                <button onclick="completeTask(${row.originalIndex})" title="Mark Complete" class="p-1.5 rounded text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 transition cursor-pointer">
+                  <i class="fa-solid fa-check"></i>
+                </button>
+                <button onclick="deleteTask(${row.originalIndex})" title="Delete Assignment" class="p-1.5 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition cursor-pointer">
+                  <i class="fa-regular fa-trash-can"></i>
+                </button>
+              </div>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      const q1 = scored.filter(i => i.daysLeft < 2 && i.grade_weight_pct >= 10);
+      const q2 = scored.filter(i => i.daysLeft >= 2 && i.grade_weight_pct >= 10);
+      const q3 = scored.filter(i => i.daysLeft < 2 && i.grade_weight_pct < 10);
+      const q4 = scored.filter(i => i.daysLeft >= 2 && i.grade_weight_pct < 10);
+
+      renderMatrixBox('matrixQ1', 'badgeQ1', q1);
+      renderMatrixBox('matrixQ2', 'badgeQ2', q2);
+      renderMatrixBox('matrixQ3', 'badgeQ3', q3);
+      renderMatrixBox('matrixQ4', 'badgeQ4', q4);
+    }
+
+    function renderMatrixBox(containerId, badgeId, list) {
+      document.getElementById(badgeId).textContent = list.length;
+      const el = document.getElementById(containerId);
+      if (list.length === 0) {
+        el.innerHTML = '<span class="italic text-slate-400">Empty</span>';
+        return;
+      }
+      el.innerHTML = list.map(item => `
+        <div class="flex items-center justify-between p-1.5 rounded bg-white/70 dark:bg-slate-900/60 border border-slate-200/50 dark:border-slate-800/50">
+          <span class="font-medium truncate max-w-[70%]">${escapeHtml(item.course)}: ${escapeHtml(item.task)}</span>
+          <span class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800">${item.grade_weight_pct}%</span>
+        </div>
+      `).join('');
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>'"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag));
+    }
+
+    window.completeTask = function(index) {
+      const items = getAssignments();
+      const completed = items[index];
+      items.splice(index, 1);
+      saveAssignments(items);
+    };
+
+    window.deleteTask = function(index) {
+      const items = getAssignments();
+      const task = items[index];
+      if (confirm(`Delete "${task.course}: ${task.task}"?`)) {
+        items.splice(index, 1);
+        saveAssignments(items);
+      }
+    };
+
+    // Modal Visibility
+    const modal = document.getElementById('addModal');
+    const openBtn = document.getElementById('openAddModalBtn');
+    const closeBtn = document.getElementById('closeModalBtn');
+    const cancelBtn = document.getElementById('cancelModalBtn');
+
+    function openModal() {
+      modal.classList.add('is-open');
+      document.getElementById('courseInput').focus();
+    }
+
+    function closeModal() {
+      modal.classList.remove('is-open');
+      document.getElementById('addForm').reset();
+    }
+
+    openBtn.addEventListener('click', openModal);
+    closeBtn.addEventListener('click', closeModal);
+    cancelBtn.addEventListener('click', closeModal);
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
+    });
+
+    // Form Submission
+    document.getElementById('addForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const course = document.getElementById('courseInput').value.trim();
+      const task = document.getElementById('taskInput').value.trim();
+      const due = document.getElementById('dueDateInput').value;
+      const weight = parseFloat(document.getElementById('weightInput').value);
+
+      if (!course || !task || !due || isNaN(weight)) return;
+
+      const items = getAssignments();
+      items.push({ course, task, due_date: due, grade_weight_pct: weight });
+      saveAssignments(items);
+
+      closeModal();
+    });
+
+    // CSV Export
+    document.getElementById('exportCsvBtn').addEventListener('click', () => {
+      const items = getAssignments();
+      let csv = 'course,task,due_date,grade_weight_pct\n';
+      items.forEach(i => {
+        csv += `"${i.course}","${i.task}","${i.due_date}",${i.grade_weight_pct}\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'assignments.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // CSV Import
+    const fileInput = document.getElementById('csvFileInput');
+    document.getElementById('importCsvBtn').addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const lines = event.target.result.split('\n').filter(l => l.trim().length > 0);
+        if (lines.length <= 1) return;
+        const newItems = [];
+        for (let i = 1; i < lines.length; i++) {
+          const parts = lines[i].split(',').map(s => s.replace(/^"|"$/g, '').trim());
+          if (parts.length >= 4) {
+            newItems.push({
+              course: parts[0],
+              task: parts[1],
+              due_date: parts[2],
+              grade_weight_pct: parseFloat(parts[3]) || 5
+            });
+          }
+        }
+        if (newItems.length > 0) saveAssignments(newItems);
+      };
+      reader.readAsText(file);
+      fileInput.value = '';
+    });
+
+    // .ICS Calendar Export
+    document.getElementById('exportIcsBtn').addEventListener('click', () => {
+      const scored = computeScoredList(getAssignments());
+      if (scored.length === 0) return alert('No assignments to export!');
+
+      let ics = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Assignment Triage Engine//EN',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        'X-WR-CALNAME:Assignment Focus Schedule'
+      ];
+
+      scored.forEach(item => {
+        const cleanDue = item.due_date.replace(/-/g, '');
+        const nextDay = new Date(item.due_date + 'T00:00:00');
+        nextDay.setDate(nextDay.getDate() + 1);
+        const nextDayStr = nextDay.toISOString().slice(0, 10).replace(/-/g, '');
+
+        ics.push(
+          'BEGIN:VEVENT',
+          `UID:deadline-${Math.random().toString(36).substring(2)}@triage`,
+          `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
+          `DTSTART;VALUE=DATE:${cleanDue}`,
+          `DTEND;VALUE=DATE:${nextDayStr}`,
+          `SUMMARY:🚨 DEADLINE: ${item.course} - ${item.task}`,
+          `DESCRIPTION:Grade Weight: ${item.grade_weight_pct}% | Triage Priority: ${item.triageScore.toFixed(1)}`,
+          'STATUS:CONFIRMED',
+          'END:VEVENT'
+        );
+      });
+
+      ics.push('END:VCALENDAR');
+      const blob = new Blob([ics.join('\r\n')], { type: 'text/calendar' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'study_schedule.ics';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // Theme Toggle
+    const themeBtn = document.getElementById('themeToggle');
+    themeBtn.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+    });
+    if (localStorage.getItem('theme') === 'dark' || (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+
+    render();
+  </script>
+</body>
+</html>
+EOF
