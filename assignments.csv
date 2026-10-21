@@ -1,6 +1,7 @@
-course,task,due_date,grade_weight_pct,estimated_hours
-STATS 100A,Homework 4,2026-10-24,5,4.0
-CS 32,Project 2: Doubly-Linked Lists,2026-10-26,10,12.0
-ENGCOMP 3,Draft Rhetorical Analysis,2026-10-22,15,5.5
-STATS 100A,Midterm 1 Review,2026-10-28,25,8.0
-MATH 33A,Problem Set 3,2026-10-23,4,3.0
+course,task,due_date,grade_weight_pct
+STATS 100A,Homework 4,2026-10-24,5.0
+CS 32,Project 2: Doubly-Linked Lists,2026-10-26,10.0
+ENGCOMP 3,Draft Rhetorical Analysis,2026-10-22,15.0
+STATS 100A,Midterm 1 Review,2026-10-28,25.0
+MATH 33A,Problem Set 3,2026-10-23,4.0
+CS 32,Project 3,2026-10-31,12.0
